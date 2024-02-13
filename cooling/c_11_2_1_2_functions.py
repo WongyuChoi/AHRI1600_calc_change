@@ -36,7 +36,8 @@ def get_q_tj(
   elif q_dot_Low_tj < BL_tj < q_dot_Full_tj:
     X_Tj_k1 = (q_dot_Full_tj - BL_tj) / (q_dot_Full_tj - q_dot_Low_tj)
     X_Tj_k2 = 1 - X_Tj_k1
-    X_j = X_Tj_k1
+    # X_j = X_Tj_k1
+    X_j = 1
     ratio_total_cool = (X_Tj_k1 * q_dot_Low_tj + X_Tj_k2 * q_dot_Full_tj) * N_j_c
 
   if (q_dot_Low_tj < BL_tj < q_dot_Full_tj) and lock_out_low_capacity_ops:
@@ -48,7 +49,8 @@ def get_q_tj(
       else: # lock out temperature is not reached, just as the above  q_dot_Low_tj < BL_tj < q_dot_Full_tj
         X_Tj_k1 = (q_dot_Full_tj - BL_tj) / (q_dot_Full_tj - q_dot_Low_tj)
         X_Tj_k2 = 1 - X_Tj_k1
-        X_j = X_Tj_k1
+        # X_j = X_Tj_k1
+        X_j = 1
         ratio_total_cool = (X_Tj_k1 * q_dot_Low_tj + X_Tj_k2 * q_dot_Full_tj) * N_j_c
     else: # when od_temp_when_lock_out is None, just lock out low capacity operations
       X_Tj_k2 = BL_tj / q_dot_Full_tj

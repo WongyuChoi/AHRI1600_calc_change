@@ -10,6 +10,7 @@ def get_delta_Low_cutout_factor(
         is_unit_prohibit_compressor_operation_based_on_outdoor_temperature: bool = False,
         t_on: Union[float, None] = None,
         t_off: Union[float, None] = None,
+        # use_COP: bool = False,
 ) -> float:
     """
     A function to calculate a cutout factor (delta) for Low stage
@@ -33,15 +34,15 @@ def get_delta_Low_cutout_factor(
     if t_on is None:
         t_on = float('-inf')
 
-    # the latter is different from Appendix M1
-    if (tj_i <= t_off) | (q_dot_Low_tj / (3.412 * P_Low_tj) < 1.0):
-        delta = 0
-    elif t_off < tj_i <= t_on:
-        delta = 1/2
-    elif tj_i > t_on:
-        delta = 1
-
-    return delta
+    if is_unit_prohibit_compressor_operation_based_on_outdoor_temperature:
+        if tj_i <= t_off:
+            return 0
+        elif t_off < tj_i <= t_on:
+            return 0.5
+        elif tj_i > t_on:
+            return 1
+    else:
+        return 1
 
 def get_delta_Int_cutout_factor(
         tj_i: float,
@@ -50,6 +51,7 @@ def get_delta_Int_cutout_factor(
         is_unit_prohibit_compressor_operation_based_on_outdoor_temperature: bool = False,
         t_on: Union[float, None] = None,
         t_off: Union[float, None] = None,
+        # use_COP: bool = False,
 ) -> float:
     """
     A function to calculate a cutout factor (delta) for Low stage
@@ -73,15 +75,15 @@ def get_delta_Int_cutout_factor(
     if t_on is None:
         t_on = float('-inf')
 
-    # the latter is different from Appendix M1
-    if (tj_i <= t_off) | (q_dot_Int_tj / (3.412 * P_Int_tj) < 1.0):
-        delta = 0
-    elif t_off < tj_i <= t_on:
-        delta = 1/2
-    elif tj_i > t_on:
-        delta = 1
-
-    return delta
+    if is_unit_prohibit_compressor_operation_based_on_outdoor_temperature:
+        if tj_i <= t_off:
+            return 0
+        elif t_off < tj_i <= t_on:
+            return 0.5
+        elif tj_i > t_on:
+            return 1
+    else:
+        return 1
 
 
 def get_delta_Full_cutout_factor(
@@ -94,6 +96,7 @@ def get_delta_Full_cutout_factor(
     t_on: Optional[float] = None,
     # The outdoor temperature below which the compressor ceases to operate
     t_off: Optional[float] = None,
+    use_COP: bool = False,
 ) -> float:
     """
     get Heat pump low-temperature cutout factor eqn. 11.129, 11.130, 11.131
@@ -102,6 +105,7 @@ def get_delta_Full_cutout_factor(
     :param P_Full_tj: calculated heating power at each bin temperature
     :param t_on: the outdoor temperature at which the compressor reinitiates operation
     :param t_off: The outdoor temperature below which the compressor ceases to operate
+    :param is_unit_prohibit_compressor_operation_based_on_outdoor_temperature: the controls of the unit prohibit compressor operation based on outdoor temperature?
     :return: Heat pump low-temperature cutout factor
     """
     # validation: if is_unit_prohibit_compressor_operation_based_on_outdoor_temperature is True, both t_on and t_off should exist
@@ -115,11 +119,29 @@ def get_delta_Full_cutout_factor(
     if t_on is None:
         t_on = float('-inf')
 
-    if tj_i <= t_off or q_dot_Full_tj / (3.412 * P_Full_tj) < 1:
-        return 0
-    elif t_off < tj_i <= t_on and q_dot_Full_tj / (3.412 * P_Full_tj) >= 1:
-        return 0.5
-    elif tj_i > t_on and q_dot_Full_tj / (3.412 * P_Full_tj) >= 1:
+    COP = q_dot_Full_tj / (3.412 * P_Full_tj)
+    if use_COP: # goes regardless cut off temperature in Appendix M1
+        if COP < 1:
+            return 0
+    if is_unit_prohibit_compressor_operation_based_on_outdoor_temperature:
+        if use_COP:
+            if COP < 1:
+                return 0
+            else:
+                if tj_i <= t_off:
+                    return 0
+                elif t_off < tj_i <= t_on:
+                    return 0.5
+                elif tj_i > t_on:
+                    return 1
+        else:
+            if tj_i <= t_off:
+                return 0
+            elif t_off < tj_i <= t_on:
+                return 0.5
+            elif tj_i > t_on:
+                return 1
+    else:
         return 1
 
 def get_E_tj(
@@ -161,24 +183,19 @@ def get_E_tj(
     COP_inter = 0.0
     if is_variable_capacity_certified_two_stage_system:
         if q_dot_Low_tj >= BL_tj:
-            X_k1 = BL_tj / q_dot_Low_tj
-            X_j = X_k1
+            X_k1 = BL_tj / q_dot_Low_tj 
+            X_j = X_k1 * delta_Low_cutout
             PLF = 1 - C_h_D * (1 - X_k1)
-            ratioPower = X_k1 * P_Low_tj * \
-                delta_Low_cutout / PLF * N_j_h
+            ratioPower = X_k1 * P_Low_tj * delta_Low_cutout/ PLF * N_j_h
         elif q_dot_Low_tj < BL_tj < q_dot_Full_tj:
-            X_k1 = (q_dot_Full_tj - BL_tj) / \
-                (q_dot_Full_tj - q_dot_Low_tj)
-            X_j = X_k1
+            X_k1 = (q_dot_Full_tj - BL_tj) / (q_dot_Full_tj - q_dot_Low_tj) 
+            X_j = delta_Low_cutout
             X_k2 = 1 - X_k1
             ratioPower = (X_k1 * P_Low_tj + X_k2 *
                           P_Full_tj) * delta_Low_cutout * N_j_h
-        # Add other cases here...
 
-        # Section 4.2.3.4
-        # Appendix M and M1 may have typo here--should be '-', not '*'
         if BL_tj >= q_dot_Full_tj:
-            X_j = 1
+            X_j = delta_Full_cutout
             ratioPower = P_Full_tj * delta_Full_cutout * N_j_h
 
     else:
@@ -187,11 +204,10 @@ def get_E_tj(
         COP_kv = q_dot_Int_tj / P_Int_tj / 3.412
 
         if q_dot_Low_tj >= BL_tj:
-            X_k1 = BL_tj / q_dot_Low_tj
-            X_j = X_k1
+            X_k1 = BL_tj / q_dot_Low_tj 
+            X_j = X_k1 * delta_Low_cutout
             PLF = 1 - C_h_D * (1 - X_k1)
-            ratioPower = X_k1 * P_Low_tj * \
-                delta_Low_cutout / PLF * N_j_h
+            ratioPower = X_k1 * P_Low_tj * delta_Low_cutout / PLF * N_j_h
         elif q_dot_Low_tj < BL_tj < q_dot_Full_tj:
             if q_dot_Low_tj < BL_tj <= q_dot_Int_tj:
                 COP_inter = COP_k1 + (COP_kv - COP_k1) / (q_dot_Int_tj -
@@ -199,11 +215,11 @@ def get_E_tj(
             else:  # q_dot_Int_tj < BL_tj and BL_tj <= q_dot_Full_tj:
                 COP_inter = COP_kv + (COP_k2 - COP_kv) / (q_dot_Full_tj -
                                                           q_dot_Int_tj) * (BL_tj - q_dot_Int_tj)
-            X_j = 1  # variable mode is always on
+            X_j = delta_Int_cutout  # variable mode is always on
             ratioPower = BL_tj / (3.412 * COP_inter) * delta_Int_cutout * N_j_h
 
         elif BL_tj >= q_dot_Full_tj:
-            X_j = 1
+            X_j = delta_Full_cutout
             X_k2 = 1
             ratioPower = P_Full_tj * delta_Full_cutout * N_j_h
 

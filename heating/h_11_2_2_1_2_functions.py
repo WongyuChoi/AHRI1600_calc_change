@@ -13,6 +13,7 @@ def get_delta_Full_cutout_factor(
     t_on: Optional[float] = None,
     # The outdoor temperature below which the compressor ceases to operate
     t_off: Optional[float] = None,
+    use_COP: bool = False,
 ) -> float:
     """
     get Heat pump low-temperature cutout factor eqn. 11.129, 11.130, 11.131
@@ -34,18 +35,30 @@ def get_delta_Full_cutout_factor(
         t_off = float('-inf')
     if t_on is None:
         t_on = float('-inf')
+    COP = q_dot_Full_tj / (3.412 * P_Full_tj)
+    if use_COP: # goes regardless cut off temperature in Appendix M1
+        if COP < 1:
+            return 0
     if is_unit_prohibit_compressor_operation_based_on_outdoor_temperature:
-        if tj_i <= t_off or q_dot_Full_tj / (3.412 * P_Full_tj) < 1:
-            return 0
-        elif t_off < tj_i <= t_on and q_dot_Full_tj / (3.412 * P_Full_tj) >= 1:
-            return 0.5
-        elif tj_i > t_on and q_dot_Full_tj / (3.412 * P_Full_tj) >= 1:
-            return 1
-    else: 
-        if q_dot_Full_tj / (3.412 * P_Full_tj) < 1:
-            return 0
+        if use_COP:
+            if COP < 1:
+                return 0
+            else:
+                if tj_i <= t_off:
+                    return 0
+                elif t_off < tj_i <= t_on:
+                    return 0.5
+                elif tj_i > t_on:
+                    return 1
         else:
-            return 1
+            if tj_i <= t_off:
+                return 0
+            elif t_off < tj_i <= t_on:
+                return 0.5
+            elif tj_i > t_on:
+                return 1
+    else:
+        return 1
 
 def get_E_tj(
     N_j_h: float,
@@ -67,7 +80,8 @@ def get_E_tj(
     :return: PLF, X_j, E_tj total energy at each bin temperature
     """
     E_tj = 0.0
-    X_j = min(BL_tj / q_dot_tj, 1)
+    X_j = min(BL_tj / q_dot_tj, 1) * delta_Full_cutout
     PLF_Full_tj = 1 - deg_coeff_heat * (1 - X_j)
-    E_tj = (X_j * P_tj * delta_Full_cutout) / PLF_Full_tj * N_j_h
+    E_tj = (X_j * P_tj) / PLF_Full_tj * N_j_h
     return PLF_Full_tj, X_j, E_tj
+
